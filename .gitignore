@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Generated logs and data
+log_*.txt
+accel_log.csv
+ax_comparison.pdf
+
+# Old or unused scripts
+/main_1.py
+/logger_1.py
+/parser.py
+/read_serial_data.py
+/archive/
+
+# Submission files and screenshots
+*.zip
+MiniProjet Rapport*.pdf
+Capture d*.png
+
+# OS files
+.DS_Store
+Thumbs.db

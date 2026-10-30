@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Arduino IMU Monitor</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    button { margin-right: 10px; padding: 6px 12px; }
+    table { border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 4px 8px; font-size: 12px; }
+    th { background-color: #eee; }
+  </style>
+</head>
+<body>
+  <h1>Arduino IMU Monitor</h1>
+  <p>
+    <button onclick="sendCommand('start')">START</button>
+    <button onclick="sendCommand('stop')">STOP</button>
+    <button onclick="sendCommand('kf')">KF MODE</button>
+    <button onclick="sendCommand('dlt')">DLT MODE</button>
+    <label for="stats-input">Number of samples:</label>
+    <input id="stats-input" type="number" value="0" style="width:60px;" placeholder="n" />
+    <button onclick="sendCommand('stats'+document.getElementById('stats-input').value)">STATS</button>
+    <button onclick="sendCommand('eval')">COMPRESSION EVAL</button>
+  </p>
+  <p id="status"></p>
+
+  <div style="display: flex; gap: 20px;">
+    <div>
+      <table id="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>t_ms</th>
+            <th>Type</th>
+            <th>ax</th>
+            <th>ay</th>
+            <th>az</th>
+            <th>received_at</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div>
+      <label for="stats-table">Statistics calculated on the <br/>ring buffer (Max = 50 samples):</label>
+      <table id="stats-table">
+        <thead>
+          <tr>
+            <th>axis</th>
+            <th>A mean</th>
+            <th>A min</th>
+            <th>A max</th>
+            <th>P mean</th>
+            <th>P min</th>
+            <th>P max</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+<script>
+async function sendCommand(cmd) {
+  let url;
+  if (cmd.startsWith('stats')) {
+    const n = cmd.slice(5) || '0';
+    url = '/stats/' + encodeURIComponent(n);
+  } else {
+    switch (cmd) {
+      case 'start':
+        url = '/start';
+        break;
+      case 'stop':
+        url = '/stop';
+        break;
+      case 'kf':
+        url = '/kf';
+        break;
+      case 'dlt':
+        url = '/dlt';
+        break;
+      case 'eval':
+        url = '/eval';
+        break;
+      default:
+        url = '/stop';
+    }
+  }
+  try {
+    const resp = await fetch(url, { method: 'POST' });
+    const data = await resp.json();
+    document.getElementById('status').textContent = 'Command: ' + data.status;
+  } catch (e) {
+    document.getElementById('status').textContent = 'Error sending command';
+  }
+}
+
+async function fetchData() {
+  try {
+    const resp = await fetch('/data');
+    const data = await resp.json();
+    document.getElementById('status').textContent = data.status;
+    const rows = data.rows || [];
+    if (data.type == "data") {
+      const tbody = document.querySelector('#data-table tbody');
+      tbody.innerHTML = '';
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const tr = document.createElement('tr');
+
+        const idx = document.createElement('td');
+        idx.textContent = r.seq;
+        tr.appendChild(idx);
+
+        const t = document.createElement('td');
+        t.textContent = r.ms;
+        tr.appendChild(t);
+
+        const type = document.createElement('td');
+        type.textContent = r.type;
+        tr.appendChild(type);
+
+        if (r.type == 'DLT') {
+          const ax = document.createElement('td');
+          ax.textContent = r.kv.dax;
+          tr.appendChild(ax);
+
+          const ay = document.createElement('td');
+          ay.textContent = r.kv.day;
+          tr.appendChild(ay);
+
+          const az = document.createElement('td');
+          az.textContent = r.kv.daz;
+          tr.appendChild(az);
+        } else {
+          const ax = document.createElement('td');
+          ax.textContent = r.kv.ax;
+          tr.appendChild(ax);
+
+          const ay = document.createElement('td');
+          ay.textContent = r.kv.ay;
+          tr.appendChild(ay);
+
+          const az = document.createElement('td');
+          az.textContent = r.kv.az;
+          tr.appendChild(az);
+        }
+
+        
+
+        const ts = document.createElement('td');
+        if (r.received_at !== undefined) {
+          ts.textContent = new Date(r.received_at * 1000).toLocaleTimeString();
+        } else {
+          ts.textContent = '';
+        }
+        tr.appendChild(ts);
+
+        tbody.appendChild(tr);
+      }
+    } else {
+      const tbody = document.querySelector('#stats-table tbody');
+      tbody.innerHTML = '';
+      const arduino = data.arduino || {};
+      const python = data.python || {};
+      ['ax','ay','az'].forEach(axis => {
+        const arow = arduino[axis] || {};
+        const prow = python[axis] || {};
+        const tr = document.createElement('tr');
+
+        const td_axis = document.createElement('td');
+        td_axis.textContent = axis;
+        tr.appendChild(td_axis);
+
+        const amean = document.createElement('td');
+        amean.textContent = arow.mean;
+        tr.appendChild(amean);
+        const amin = document.createElement('td');
+        amin.textContent = arow.min;
+        tr.appendChild(amin);
+        const amax = document.createElement('td');
+        amax.textContent = arow.max;
+        tr.appendChild(amax);
+
+        const pmean = document.createElement('td');
+        pmean.textContent = prow.mean;
+        tr.appendChild(pmean);
+        const pmin = document.createElement('td');
+        pmin.textContent = prow.min;
+        tr.appendChild(pmin);
+        const pmax = document.createElement('td');
+        pmax.textContent = prow.max;
+        tr.appendChild(pmax);
+
+        tbody.appendChild(tr);
+      });
+      document.getElementById('status').textContent = `Stats for ${data.count} samples`;
+    }
+
+  } catch (e) {
+    // ignore fetch errors
+  }
+}
+
+// poll every 500 ms
+setInterval(fetchData, 500);
+fetchData();
+</script>
+</body>
+</html>
